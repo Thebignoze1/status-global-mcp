@@ -1,6 +1,6 @@
 {
   "name": "status-global-mcp",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "MCP Server for Status Global — Run web audits and get AI-ready improvement prompts directly from Claude Code or ChatGPT",
   "type": "module",
   "main": "dist/index.js",
