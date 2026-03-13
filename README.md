@@ -1,49 +1,31 @@
 # Status Global MCP Server
 
-[MCP](https://modelcontextprotocol.io) server for [Status Global](https://status-global.fr) — run web audits (performance, security, SEO, DNS) and get AI-ready improvement prompts directly in Claude Code, ChatGPT, or any MCP client.
+[![npm](https://img.shields.io/npm/v/status-global-mcp)](https://www.npmjs.com/package/status-global-mcp)
 
-## Quick Start
+[MCP](https://modelcontextprotocol.io) server for [Status Global](https://status.dragnoc.fr) — run web audits (performance, security, SEO, DNS) and get AI-ready improvement prompts directly in Claude Code, ChatGPT, or any MCP client.
 
-### 1. Get your API key
+## Installation
 
-1. Create an account at [status-global.fr](https://status-global.fr)
-2. Go to **My Account → API Key → Generate**
-3. Copy your key
-
-### 2. Add to Claude Code
+**One command:**
 
 ```bash
-claude mcp add status-global -- npx @status-global/mcp-server
+claude mcp add status-global -e STATUS_GLOBAL_API_KEY=YOUR_KEY -- npx status-global-mcp
 ```
 
-Then set your API key:
+> No API key yet? Run the command without one — the server will give you a direct link to create your account and generate a key.
 
-```json
-{
-  "mcpServers": {
-    "status-global": {
-      "command": "npx",
-      "args": ["@status-global/mcp-server"],
-      "env": {
-        "STATUS_GLOBAL_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-### 3. Use it
-
-In Claude Code, just say:
+That's it. Now in Claude Code, just say:
 
 ```
 Audit my website https://example.com and fix the issues
 ```
 
-Claude will:
-1. Run a full audit (100 modules across 5 categories)
-2. Get the structured improvement prompt
-3. Read your codebase and apply fixes by priority
+## How it works
+
+1. You ask Claude to audit a URL
+2. Status Global runs **100 analysis modules** across 5 categories
+3. The MCP server returns a structured improvement prompt
+4. Claude reads your codebase and applies fixes by priority
 
 ## Tools
 
@@ -70,16 +52,32 @@ Retrieves an existing audit report by job ID.
 
 Lists available test servers.
 
-## Environment Variables
+## Configuration
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `STATUS_GLOBAL_API_KEY` | Yes | Your API key from status-global.fr |
-| `STATUS_GLOBAL_URL` | No | Custom API base URL (default: `https://status-global.fr`) |
+| `STATUS_GLOBAL_API_KEY` | Yes | Your API key ([get one here](https://status.dragnoc.fr/app/account)) |
+| `STATUS_GLOBAL_URL` | No | Custom API URL (default: `https://status.dragnoc.fr`) |
+
+### Manual setup (alternative)
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "status-global": {
+      "command": "npx",
+      "args": ["status-global-mcp"],
+      "env": {
+        "STATUS_GLOBAL_API_KEY": "your_key_here"
+      }
+    }
+  }
+}
+```
 
 ## What does it audit?
-
-Status Global runs **100 analysis modules** across 5 categories:
 
 - **Performance** (15 modules) — Cache, compression, images, fonts, HTTP/2, Core Web Vitals...
 - **Security** (16 modules) — TLS, headers, mixed content, data leaks, GDPR cookies...

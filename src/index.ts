@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const API_BASE = process.env.STATUS_GLOBAL_URL || "https://status-global.fr";
+const API_BASE = process.env.STATUS_GLOBAL_URL || "https://status.dragnoc.fr";
 const API_KEY = process.env.STATUS_GLOBAL_API_KEY || "";
 
 const POLL_INTERVAL_MS = 3000;
@@ -42,11 +42,6 @@ interface Module {
   premium?: boolean;
 }
 
-interface ServerEntry {
-  code: string;
-  name: string;
-}
-
 // ── API helpers ──
 
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
@@ -70,22 +65,20 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function getServers(): Promise<ServerEntry[]> {
-  const data = await apiRequest<{ ok: boolean; servers: ServerEntry[] }>("/api/servers");
-  return data.servers || [];
-}
-
-async function createTest(url: string, serverCode: string): Promise<string> {
-  const data = await apiRequest<{ ok: boolean; job_id?: string; error?: string }>(
+async function createTest(url: string): Promise<string> {
+  const data = await apiRequest<{ ok: boolean; job_id?: string; error?: string; upgrade_url?: string }>(
     "/api/test",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, server_code: serverCode }),
+      body: JSON.stringify({ url }),
     }
   );
 
   if (!data.ok || !data.job_id) {
+    if (data.upgrade_url) {
+      throw new Error(`${data.error}\n→ ${data.upgrade_url}`);
+    }
     throw new Error(data.error || "Failed to create test");
   }
 
@@ -131,7 +124,7 @@ function buildPrompt(report: Report, targetUrl: string): string {
 
   lines.push(`# Audit web — ${targetUrl}`);
   lines.push(`# Score global : ${scores.global || 0}/100`);
-  lines.push(`# Généré par Status Global (https://status-global.fr)`);
+  lines.push(`# Généré par Status Global (${API_BASE})`);
   lines.push("");
   lines.push("## Résumé des scores");
   lines.push("");
@@ -246,36 +239,37 @@ server.tool(
   "Lance un audit complet d'un site web (performance, sécurité, SEO, DNS) via Status Global et retourne un prompt structuré pour corriger les problèmes détectés. Nécessite une clé API Status Global.",
   {
     url: z.string().describe("URL du site web à auditer (ex: https://example.com)"),
-    server: z.string().optional().describe("Code du serveur de test (ex: fr-1). Si omis, utilise le premier serveur disponible."),
     format: z
       .enum(["prompt", "summary", "full"])
       .optional()
       .describe("Format de sortie : 'prompt' (défaut) = prompt IA structuré, 'summary' = résumé concis, 'full' = rapport JSON complet"),
   },
-  async ({ url, server: serverCode, format }) => {
+  async ({ url, format }) => {
     if (!API_KEY) {
       return {
         content: [
           {
             type: "text" as const,
-            text: `❌ Clé API non configurée.\n\n1. Créez un compte sur ${API_BASE}\n2. Allez dans Mon Compte → Clé API → Générer\n3. Configurez la variable d'environnement :\n   STATUS_GLOBAL_API_KEY=votre_clé_ici\n\nOu ajoutez dans votre config MCP :\n{\n  "mcpServers": {\n    "status-global": {\n      "command": "npx",\n      "args": ["@status-global/mcp-server"],\n      "env": {\n        "STATUS_GLOBAL_API_KEY": "votre_clé_ici"\n      }\n    }\n  }\n}`,
+            text: [
+              `Clé API non configurée.`,
+              ``,
+              `## Configuration en 2 étapes`,
+              ``,
+              `### 1. Obtenez votre clé API`,
+              `Créez un compte sur ${API_BASE} puis allez dans Mon Compte > Clé API > Générer.`,
+              ``,
+              `### 2. Ajoutez-la à Claude Code`,
+              `\`\`\`bash`,
+              `claude mcp add status-global -e STATUS_GLOBAL_API_KEY=VOTRE_CLE -- npx status-global-mcp`,
+              `\`\`\``,
+            ].join("\n"),
           },
         ],
       };
     }
 
     try {
-      // Get server code
-      if (!serverCode) {
-        const servers = await getServers();
-        if (!servers.length) throw new Error("Aucun serveur disponible");
-        serverCode = servers[0].code;
-      }
-
-      // Create test
-      const jobId = await createTest(url, serverCode);
-
-      // Poll until done
+      const jobId = await createTest(url);
       const job = await pollUntilDone(jobId);
 
       if (job.status === "error") {
@@ -283,7 +277,7 @@ server.tool(
           content: [
             {
               type: "text" as const,
-              text: `❌ L'audit a échoué : ${job.error_message || "erreur inconnue"}\n\nURL : ${url}\nJob ID : ${jobId}`,
+              text: `L'audit a échoué : ${job.error_message || "erreur inconnue"}\n\nURL : ${url}\nJob ID : ${jobId}`,
             },
           ],
         };
@@ -295,7 +289,7 @@ server.tool(
           content: [
             {
               type: "text" as const,
-              text: `⚠️ L'audit est terminé mais le rapport est vide.\n\nJob ID : ${jobId}`,
+              text: `L'audit est terminé mais le rapport est vide.\n\nJob ID : ${jobId}`,
             },
           ],
         };
@@ -323,7 +317,7 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `❌ Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
       };
@@ -348,7 +342,7 @@ server.tool(
 
       if (!job.ok) {
         return {
-          content: [{ type: "text" as const, text: `❌ Rapport non trouvé : ${job_id}` }],
+          content: [{ type: "text" as const, text: `Rapport non trouvé : ${job_id}` }],
         };
       }
 
@@ -357,7 +351,7 @@ server.tool(
           content: [
             {
               type: "text" as const,
-              text: `⏳ Rapport pas encore prêt (statut: ${job.status}, progression: ${job.progress || 0}%)`,
+              text: `Rapport pas encore prêt (statut: ${job.status}, progression: ${job.progress || 0}%)`,
             },
           ],
         };
@@ -386,34 +380,7 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `❌ Erreur : ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-// Tool: list available servers
-server.tool(
-  "list_servers",
-  "Liste les serveurs de test disponibles pour les audits.",
-  {},
-  async () => {
-    try {
-      const servers = await getServers();
-      const text = servers.length
-        ? servers.map((s) => `- **${s.code}** : ${s.name}`).join("\n")
-        : "Aucun serveur disponible.";
-      return {
-        content: [{ type: "text" as const, text: `## Serveurs disponibles\n\n${text}` }],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `❌ Erreur : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
       };
