@@ -1,0 +1,41 @@
+{
+  "name": "@status-global/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server for Status Global — Run web audits and get AI-ready improvement prompts directly from Claude Code or ChatGPT",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "status-global-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "claude",
+    "status-global",
+    "web-audit",
+    "seo",
+    "performance",
+    "security"
+  ],
+  "author": "Thebignoze1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Thebignoze1/status-global-mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
