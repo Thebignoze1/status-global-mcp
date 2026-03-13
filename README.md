@@ -9,12 +9,18 @@
 **One command:**
 
 ```bash
+claude mcp add status-global -- npx status-global-mcp
+```
+
+That's it. When you first use it, Claude will guide you to get an API key and configure it automatically.
+
+You can also provide the key directly:
+
+```bash
 claude mcp add status-global -e STATUS_GLOBAL_API_KEY=YOUR_KEY -- npx status-global-mcp
 ```
 
-> No API key yet? Run the command without one — the server will give you a direct link to create your account and generate a key.
-
-That's it. Now in Claude Code, just say:
+Now in Claude Code, just say:
 
 ```
 Audit my website https://example.com and fix the issues

@@ -3,12 +3,39 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
 const API_BASE = process.env.STATUS_GLOBAL_URL || "https://status.dragnoc.fr";
-const API_KEY = process.env.STATUS_GLOBAL_API_KEY || "";
+
+const CONFIG_DIR = join(homedir(), ".config", "status-global");
+const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 300_000; // 5 minutes max
+
+// ── Config persistence ──
+
+function loadConfig(): { apiKey?: string } {
+  try {
+    return JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveConfig(config: { apiKey?: string }): void {
+  mkdirSync(CONFIG_DIR, { recursive: true });
+  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+}
+
+function getApiKey(): string {
+  // Env var takes priority, then config file
+  return process.env.STATUS_GLOBAL_API_KEY || loadConfig().apiKey || "";
+}
+
+// ── Types ──
 
 interface JobResponse {
   ok: boolean;
@@ -46,13 +73,14 @@ interface Module {
 
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
+  const apiKey = getApiKey();
   const headers: Record<string, string> = {
     "Accept": "application/json",
     ...((options?.headers as Record<string, string>) || {}),
   };
 
-  if (API_KEY) {
-    headers["Authorization"] = `Bearer ${API_KEY}`;
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
   }
 
   const res = await fetch(url, { ...options, headers });
@@ -103,6 +131,35 @@ async function pollUntilDone(jobId: string): Promise<JobResponse> {
   }
 
   throw new Error("Audit timed out after 5 minutes");
+}
+
+// ── No API key response ──
+
+function noApiKeyResponse() {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: [
+          `Clé API non configurée.`,
+          ``,
+          `## Configuration en 2 étapes`,
+          ``,
+          `### 1. Obtenez votre clé API`,
+          `Créez un compte sur ${API_BASE} puis allez dans **Mon Compte → Clé API → Générer**.`,
+          ``,
+          `### 2. Configurez la clé`,
+          `Dites-moi simplement : **"Configure status-global avec la clé xxxxx"**`,
+          ``,
+          `Ou manuellement :`,
+          `\`\`\`bash`,
+          `claude mcp remove status-global`,
+          `claude mcp add status-global -e STATUS_GLOBAL_API_KEY=VOTRE_CLE -- npx status-global-mcp`,
+          `\`\`\``,
+        ].join("\n"),
+      },
+    ],
+  };
 }
 
 // ── Prompt builder ──
@@ -230,13 +287,51 @@ function buildSummary(report: Report, targetUrl: string): string {
 
 const server = new McpServer({
   name: "status-global",
-  version: "1.0.0",
+  version: "1.1.0",
 });
+
+// Tool: configure API key
+server.tool(
+  "configure",
+  "Configure la clé API Status Global. La clé est sauvegardée dans ~/.config/status-global/config.json et utilisée pour tous les audits.",
+  {
+    api_key: z.string().describe("Votre clé API Status Global (depuis Mon Compte → Clé API)"),
+  },
+  async ({ api_key }) => {
+    const trimmed = api_key.trim();
+    if (!trimmed || trimmed.length < 16) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Clé API invalide. Générez-en une sur ${API_BASE}/app/account`,
+          },
+        ],
+      };
+    }
+
+    saveConfig({ apiKey: trimmed });
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: [
+            `Clé API configurée et sauvegardée.`,
+            ``,
+            `Vous pouvez maintenant lancer un audit :`,
+            `**"Audite mon site https://example.com et corrige les problèmes"**`,
+          ].join("\n"),
+        },
+      ],
+    };
+  }
+);
 
 // Tool: audit a website
 server.tool(
   "audit_website",
-  "Lance un audit complet d'un site web (performance, sécurité, SEO, DNS) via Status Global et retourne un prompt structuré pour corriger les problèmes détectés. Nécessite une clé API Status Global.",
+  "Lance un audit complet d'un site web (performance, sécurité, SEO, DNS) via Status Global et retourne un prompt structuré pour corriger les problèmes détectés.",
   {
     url: z.string().describe("URL du site web à auditer (ex: https://example.com)"),
     format: z
@@ -245,27 +340,8 @@ server.tool(
       .describe("Format de sortie : 'prompt' (défaut) = prompt IA structuré, 'summary' = résumé concis, 'full' = rapport JSON complet"),
   },
   async ({ url, format }) => {
-    if (!API_KEY) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: [
-              `Clé API non configurée.`,
-              ``,
-              `## Configuration en 2 étapes`,
-              ``,
-              `### 1. Obtenez votre clé API`,
-              `Créez un compte sur ${API_BASE} puis allez dans Mon Compte > Clé API > Générer.`,
-              ``,
-              `### 2. Ajoutez-la à Claude Code`,
-              `\`\`\`bash`,
-              `claude mcp add status-global -e STATUS_GLOBAL_API_KEY=VOTRE_CLE -- npx status-global-mcp`,
-              `\`\`\``,
-            ].join("\n"),
-          },
-        ],
-      };
+    if (!getApiKey()) {
+      return noApiKeyResponse();
     }
 
     try {
@@ -337,6 +413,10 @@ server.tool(
       .describe("Format de sortie : 'prompt' (défaut), 'summary', ou 'full'"),
   },
   async ({ job_id, format }) => {
+    if (!getApiKey()) {
+      return noApiKeyResponse();
+    }
+
     try {
       const job = await getJob(job_id);
 
@@ -392,6 +472,13 @@ server.tool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    console.error("[status-global] Clé API non configurée. Dites \"configure status-global avec la clé xxx\" ou allez sur " + API_BASE + "/app/account");
+  } else {
+    console.error("[status-global] Connecté. Clé API configurée.");
+  }
 }
 
 main().catch((err) => {
