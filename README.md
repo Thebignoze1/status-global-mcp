@@ -48,10 +48,6 @@ Retrieves an existing audit report by job ID.
 | `job_id` | Yes | Job ID (ULID from a previous audit) |
 | `format` | No | `prompt` (default), `summary`, or `full` |
 
-### `list_servers`
-
-Lists available test servers.
-
 ## Configuration
 
 | Variable | Required | Description |

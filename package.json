@@ -33,7 +33,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Thebignoze1/status-check-mcp"
+    "url": "https://github.com/Thebignoze1/status-global-mcp"
   },
   "homepage": "https://status.dragnoc.fr",
   "dependencies": {
