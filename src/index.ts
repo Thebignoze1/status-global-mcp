@@ -295,7 +295,7 @@ function buildSummary(report: Report, targetUrl: string, isPremium: boolean = fa
 
 const server = new McpServer({
   name: "status-global",
-  version: "1.2.2",
+  version: "1.2.3",
 });
 
 // Tool: configure API key
@@ -386,9 +386,8 @@ server.tool(
 
       if (outputFormat === "full") {
         text = JSON.stringify(report, null, 2);
-      } else if (outputFormat === "summary") {
-        text = buildSummary(report, targetUrl, isPremium);
       } else if (isPremium) {
+        // Premium users always get the full prompt (they paid for it)
         text = buildPrompt(report, targetUrl);
       } else {
         text = buildSummary(report, targetUrl, false);
@@ -456,8 +455,6 @@ server.tool(
 
       if (outputFormat === "full") {
         text = JSON.stringify(report, null, 2);
-      } else if (outputFormat === "summary") {
-        text = buildSummary(report, targetUrl, isPremium);
       } else if (isPremium) {
         text = buildPrompt(report, targetUrl);
       } else {
