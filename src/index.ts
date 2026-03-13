@@ -49,6 +49,7 @@ interface JobResponse {
   server_code?: string;
   created_at?: string;
   finished_at?: string;
+  is_premium?: boolean;
 }
 
 interface Report {
@@ -287,7 +288,7 @@ function buildSummary(report: Report, targetUrl: string): string {
 
 const server = new McpServer({
   name: "status-global",
-  version: "1.1.0",
+  version: "1.2.0",
 });
 
 // Tool: configure API key
@@ -371,6 +372,7 @@ server.tool(
         };
       }
 
+      const isPremium = job.is_premium === true;
       const outputFormat = format || "prompt";
       const targetUrl = report.target?.url || url;
       let text: string;
@@ -379,11 +381,18 @@ server.tool(
         text = JSON.stringify(report, null, 2);
       } else if (outputFormat === "summary") {
         text = buildSummary(report, targetUrl);
-      } else {
+      } else if (isPremium) {
         text = buildPrompt(report, targetUrl);
+      } else {
+        // Non-premium: summary + upsell
+        text = buildSummary(report, targetUrl);
       }
 
       text += `\n\n---\n_Rapport complet : ${API_BASE}/report/${jobId}_`;
+
+      if (!isPremium && outputFormat !== "full" && outputFormat !== "summary") {
+        text += `\n\n---\n**Obtenez le prompt complet à coller dans Claude / Codex / GPT pour corriger automatiquement votre site.**\nAvec l'abonnement Premium, vous pouvez lancer autant de tests et de corrections que vous le souhaitez.\n→ Souscrire : ${API_BASE}/pricing`;
+      }
 
       return {
         content: [{ type: "text" as const, text }],
@@ -438,6 +447,7 @@ server.tool(
       }
 
       const report = job.report;
+      const isPremium = job.is_premium === true;
       const targetUrl = report.target?.url || job.url || "";
       const outputFormat = format || "prompt";
       let text: string;
@@ -446,11 +456,17 @@ server.tool(
         text = JSON.stringify(report, null, 2);
       } else if (outputFormat === "summary") {
         text = buildSummary(report, targetUrl);
-      } else {
+      } else if (isPremium) {
         text = buildPrompt(report, targetUrl);
+      } else {
+        text = buildSummary(report, targetUrl);
       }
 
       text += `\n\n---\n_Rapport complet : ${API_BASE}/report/${job_id}_`;
+
+      if (!isPremium && outputFormat !== "full" && outputFormat !== "summary") {
+        text += `\n\n---\n**Obtenez le prompt complet à coller dans Claude / Codex / GPT pour corriger automatiquement votre site.**\nAvec l'abonnement Premium, vous pouvez lancer autant de tests et de corrections que vous le souhaitez.\n→ Souscrire : ${API_BASE}/pricing`;
+      }
 
       return {
         content: [{ type: "text" as const, text }],
